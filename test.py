@@ -43,7 +43,7 @@ def extract_variables(equation):
     return list(set(variables))
 
 
-def insert_to_function_call(items, assignment, new_insertion):
+def modify_function_call(items, assignment, new_insertion):
     
     function_assignment = assignment
 
@@ -84,7 +84,8 @@ else: {ast.unparse(function_assignment)}"""
 
 
 
-def insert_to_assignment(items, assignment):
+def insert_meta(items, assignment):
+
 
     if len(assignment.targets) != 1:
         # assuming it's not something like "a=b=3"
@@ -112,7 +113,7 @@ def insert_to_assignment(items, assignment):
     if isinstance(assignment.value, ast.Call):
         # this is assuming it's not inside an expression
         # don't even get an error for that ):
-        insert_to_function_call(items, assignment, new_insertion)
+        modify_function_call(items, assignment, new_insertion)
 
 
 
@@ -168,6 +169,9 @@ def insert_code(file, function_names):
 
     for function in functions:
 
+        # TODO this needs to be done recursively
+            # but only in the case of things i'm handling (just for loops)
+
         if function.name not in function_names:
             continue
 
@@ -176,7 +180,7 @@ def insert_code(file, function_names):
 
         for item in items:
             if isinstance(item, ast.Assign):
-                insert_to_assignment(function.body, item)
+                insert_meta(function.body, item)
 
         start_line_text = f'{INSERTIONS_NAME} = []'
         
