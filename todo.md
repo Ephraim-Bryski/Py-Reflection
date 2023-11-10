@@ -219,3 +219,16 @@ so that means i need the module to have access to the functions to insert
 i can't pass the functions in due to circular imports
 
 so instead i could pass the functions to insert as an input argument
+
+you actually can import, cause the import is in the generated code
+    doing this instead of function calls can allow you to get meta from B but not A when A calls B (not doing it that way, but could in the future)
+        i think i will do it this way instead
+
+
+move original files to a different folder instead of renaming them, easier to revert
+
+i import the library before modifying the code, meaning when i call the function, it calls the unmodified function
+
+i anyway wanted the top code to be able to execute itself so i should just make that change now
+    it then imports the modified code when it is executed by itself
+    you can inspec the stack and know if it's inside an exec, and behave differently depending on this
