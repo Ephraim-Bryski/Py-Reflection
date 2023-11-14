@@ -1,3 +1,0 @@
-import boop
-
-print('bloop')

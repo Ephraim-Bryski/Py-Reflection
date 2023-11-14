@@ -1,6 +1,6 @@
 
-def inner():
-    d = 3 + 4
+def inner(g):
+    d = g + 4
     return d
 
 def outer(b, c=3):

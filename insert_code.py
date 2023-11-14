@@ -19,20 +19,32 @@ END_RESULT_VAR = "__END_RESULT__"
 
 
 
-def _get_top_functions(tree):
+def _get_top_functions(tree: ast.Module):
     
+    """
+    gets functions in code
+    ignores functions in blocks (e.g. branches, loops)
+    """
+
     def is_function(subtree):
         return isinstance(subtree, ast.FunctionDef)
     
-
     functions = filter(is_function, tree.body)
 
     return list(functions)
 
-def _extract_variables(equation):
+def _extract_variables(equation: str):
+
+    """
+    gets all the variables in a line of code
+    """
+
     # hack i added so that functions won't be included as variables (things with periods won't count and parentheses)
-    DUMMY = "__DUMMY_DONT_INCLUDE__"
-    equation = equation.replace(".",DUMMY).replace("(",DUMMY)
+    DUMMY = "DUMMY"
+    PERIOD_DUMMY = f"__{DUMMY}__"
+    PARENTHESES_DUMMY = PERIOD_DUMMY+" " # extra space so a(b) preserves b
+    equation = equation.replace(".",PERIOD_DUMMY).replace("(",PARENTHESES_DUMMY)
+    
     # chatgpt code, i hate regexes
     # Regular expression pattern to match variables (assuming variable names contain letters and/or numbers)
     pattern = r'[a-zA-Z_][a-zA-Z0-9_]*'
@@ -40,21 +52,28 @@ def _extract_variables(equation):
     variables = filter(lambda x: (DUMMY not in x), variables)
     return list(set(variables))
 
-def _modify_function_call(items, assignment):
+def _modify_function_call(items: list, function_assignment: ast.Assign):
     
-    function_assignment = assignment
+    """
+    modifies the assignment of a function call with the additional meta output 
+    """
 
     def copy_tree(tree): return ast.parse(ast.unparse(tree)).body[0]
 
-    modified_function_assignment = copy_tree(function_assignment) # could have just unparsed and thenunparsed
+    modified_function_assignment = copy_tree(function_assignment)
     
-    output = ast.unparse(modified_function_assignment.targets[0])
+    output = ast.unparse(modified_function_assignment.targets[0]) # first element gets "a" for "a=b=func()" (nothing to do with multiple outputs)
 
     modified_output = f'[{output}, {META_OUTPUT_NAME}]'
 
     modified_function_assignment.targets[0] = ast.parse(modified_output).body[0].value
 
     modified_function_call = modified_function_assignment.value
+    
+    keyword_text = f"dummy({INSERTION_FUNCTIONS_VAR_NAME}={INSERTION_FUNCTIONS_VAR_NAME})"
+    new_keyword = ast.parse(keyword_text).body[0].value.keywords[0]
+
+    modified_function_call.keywords.append(new_keyword)
 
     func_name = ast.unparse(modified_function_call.func)
 
@@ -65,12 +84,14 @@ def _modify_function_call(items, assignment):
     new_append_text = f'{INSERTIONS_NAME}.append({new_insertion_text})'
 
     branch_call_text = \
-f"""if {INSERTION_FUNCTIONS_VAR_NAME} is not None and {func_name} in {INSERTION_FUNCTIONS_VAR_NAME}: {ast.unparse(modified_function_assignment)};{new_append_text}
+f"""if {INSERTION_FUNCTIONS_VAR_NAME} is not None and {func_name} in {INSERTION_FUNCTIONS_VAR_NAME}:
+    {ast.unparse(modified_function_assignment)}
+    {new_append_text}
 else: {ast.unparse(function_assignment)}"""
 
     branch_call = ast.parse(branch_call_text)
 
-    call_idx = items.index(assignment)
+    call_idx = items.index(function_assignment)
 
     items[call_idx] = branch_call
 
@@ -97,7 +118,6 @@ def _insert_meta(items, assignment):
         values_dict.keys.append(ast.parse(f'"{variable}"').body[0].value)
         values_dict.values.append(ast.parse(f'{variable}').body[0].value)
 
-    # @Ugly
     new_insertion_text = '{"source_code": "'+assignment_text+'","values": '+ast.unparse(values_dict)+'}'
 
     insert_index = items.index(assignment)+1
@@ -128,12 +148,12 @@ def _modify_returns(function_tree):
             
             if isinstance(item, ast.Return):
 
-                return_name = item.value.id
+                return_content = ast.unparse(item.value)
 
                 new_return = \
 f"""
-if {INSERTION_FUNCTIONS_VAR_NAME} is None : return {return_name}
-else:  return [{return_name}, {INSERTIONS_NAME}]
+if {INSERTION_FUNCTIONS_VAR_NAME} is None : return {return_content}
+else:  return [{return_content}, {INSERTIONS_NAME}]
 """
                 
                 item_index = tree.body.index(item)
@@ -144,12 +164,6 @@ else:  return [{return_name}, {INSERTIONS_NAME}]
                 
     
     step_down_tree(function_tree)
-
-def _get_temporary_file_name(file_name):
-    return ".".join(file_name.split(".")[0:-1])+"__ORIGINAL_TEMPORARY__.py"
-
-def _get_modified_file_name(file_name):
-    return ".".join(file_name.split(".")[0:-1])+"__REFERENCE_MODIFIED__.py"
 
 def _modify_file(file_name, function_names):
 
@@ -179,6 +193,19 @@ def _modify_file(file_name, function_names):
             if isinstance(item, ast.Assign):
                 _insert_meta(function.body, item)
 
+        insertions_keyword_text = f"def dummy({INSERTION_FUNCTIONS_VAR_NAME}=None):pass"
+
+        insertions_keyword_tree = ast.parse(insertions_keyword_text).body[0].args
+
+        insertions_arg = insertions_keyword_tree.args[0]
+        insertions_default = insertions_keyword_tree.defaults[0]
+
+        function.args.args.append(insertions_arg)
+        function.args.defaults.append(insertions_default)
+
+
+
+
         start_line_text = f'{INSERTIONS_NAME} = []'
         
         function.body.insert(0, ast.parse(start_line_text).body[0])
@@ -207,6 +234,26 @@ def _modify_file(file_name, function_names):
     # so, the ONLY thing i care about is stuff in functions
     
 
+def copytree_with_overwrite(src, dst):
+
+    for root, _, files in os.walk(src):
+        rel_path = os.path.relpath(root, src)
+        dest_path = os.path.join(dst, rel_path)
+
+        if not os.path.exists(dest_path):
+            os.makedirs(dest_path, exist_ok=True)
+
+        for file in files:
+            src_file_path = os.path.join(root, file)
+            dest_file_path = os.path.join(dest_path, file)
+
+            # Copy and overwrite files
+            shutil.copy(src_file_path, dest_file_path)
+
+
+
+
+
 def _copy_top_level_module(file_path, destination):
 
     # TODO could be an issue if multiple files share the same module
@@ -228,15 +275,21 @@ def _copy_top_level_module(file_path, destination):
         files = os.listdir(dir)
 
         if "__init__.py" in files:
-            
+
+
             module_name = path_parts[i]
 
-            new_path =  f'{destination}/{module_name}'
+            old_path = "/".join(path_parts[i:])
 
-            shutil.copytree(dir, new_path)
+            new_file_path =  f'{destination}/{old_path}'
+            
+            module_destination = f'{destination}/{module_name}'
+
+            shutil.copytree(dir, module_destination, dirs_exist_ok=True)
             
 
-            break
+            return [new_file_path, module_name]
+
         
     shutil.copy(file_path, destination)
 
@@ -254,33 +307,24 @@ def _copy_top_level_module(file_path, destination):
 
 def insert_code(functions_to_insert, top_function):
 
-    # TODO a bit weird how result_name has to directly call a function inside functions_to_insert
-        # probably need to rethink how this is done
-
-
-    """was_called_in_exec = "exec" in str(inspect.stack()[1])
-    if was_called_in_exec:
-        return # prevents infinite recursion"""
+    assert top_function in functions_to_insert, "one of the functions to insert must be the top function"
 
     function_locations = {}
-
 
     for function in functions_to_insert:
 
         module = inspect.getmodule(function)
 
         file_path = module.__file__
-        function_name = function.__name__.split(".")[-1]
 
         if file_path not in function_locations.keys():
             function_locations[file_path] = []
 
-        function_locations[file_path].append(function_name)
+        function_locations[file_path].append(function.__name__)
 
     
 
-    calling_path = inspect.getmodule(top_function).__file__
-    # TODO might want to check that it's in files of functions to insert stuff into
+    top_function_path = inspect.getmodule(top_function).__file__
 
     modified_code_dir = "Modified Code"
 
@@ -295,7 +339,6 @@ def insert_code(functions_to_insert, top_function):
 
     module_functions = {}
 
-    new_calling_path = None
 
     for original_file_path in function_locations.keys():
 
@@ -303,9 +346,9 @@ def insert_code(functions_to_insert, top_function):
 
         [new_file_path, module_name] = _copy_top_level_module(original_file_path, modified_code_dir)
 
-        if original_file_path == calling_path:
+        if original_file_path == top_function_path:
             top_module_name = module_name
-            new_calling_path = new_file_path
+            new_top_path = new_file_path
 
         if module_name not in module_functions.keys():
             module_functions[module_name] = []
@@ -316,15 +359,8 @@ def insert_code(functions_to_insert, top_function):
         _modify_file(new_file_path, file_functions)
 
 
-    assert new_calling_path is not None, "the top function has to be in a file where the other functions are"
+    assert top_function_path is not None, "SHOULD NEVER HAPPEN the top function has to be in a file where the other functions are"
 
-    # TODO could alias to some long name so there's no conflicts
-
-
-
-
-
-    # this is gonna be uglyy
 
     function_reference_texts = []
 
@@ -332,10 +368,12 @@ def insert_code(functions_to_insert, top_function):
 
     for module_name in module_functions.keys():
 
+        inserted_module_name = f"{module_name}_INSERTED__"
+
         # importing itself leads to circular reference
         is_top_module = module_name == top_module_name
 
-        import_line = f"import {module_name}"
+        import_line = f"import {module_name} as {inserted_module_name}"
 
         if not is_top_module:
             import_lines.append(import_line)
@@ -348,31 +386,24 @@ def insert_code(functions_to_insert, top_function):
             if is_top_module:
                 reference_text = function_name
             else:
-                reference_text = f"{module_name}.{function_name}"
+                reference_text = f"{inserted_module_name}.{function_name}"
 
             function_reference_texts.append(reference_text)
 
 
     function_refences_line = f'{INSERTION_FUNCTIONS_VAR_NAME} = [{",".join(function_reference_texts)}]'
 
-    import_lines.append(function_refences_line)
 
-    import_text = "\n".join(import_lines)+"\n"
-
+    import_text = "\n"+"\n".join(import_lines)+"\n"
 
 
-    # TODO need naming consistency between "calling" vs "top"
-        # since the top function would be in the file calling this function, it's also the calling path
-        # maybe okay as is
-
-
-    with open(new_calling_path, "r") as f:
+    with open(top_function_path, "r") as f:
         top_file_code = f.read()
 
 
     top_file_code += import_text
 
-    get_result_line = f"\n{END_RESULT_VAR} = {top_function.__name__}()[-1]"
+    get_result_line = f"\n{END_RESULT_VAR} = {top_function.__name__}({function_refences_line})[-1]"
 
     result_file = f"{modified_code_dir}/__END_RESULT__.json"
 
@@ -393,20 +424,16 @@ with open("{result_file}","w") as f:
 
     #new_top_file_path = f"{modified_code_dir}/top_script.py"
 
-    with open(new_calling_path,"w") as f:
+    with open(new_top_path,"w") as f:
         f.write(top_file_code)
 
-    subprocess.call(["python", new_calling_path])
+    subprocess.call(["python", new_top_path])
 
 
     with open(result_file) as f:
         end_result = json.load(f)
 
 
-
-
-
-    # TODO maybe append top function to functions to insert???? (either that or do assertion that it's already in there)
 
 
     return end_result

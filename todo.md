@@ -1,5 +1,10 @@
 
 to do
+
+    if you import something not in the library path that's not one of the modules to insert, it gives an error since fails to import in the modified
+        could just recursively copy everything (except for Modified Code) into Modified Codec 
+        would be slow if there's 
+
     for loops <-- need to use code i wrote before
         maybe for now just get first iteration
     
