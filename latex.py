@@ -14,7 +14,7 @@ class LatexVisitor(ast.NodeVisitor):
         if func == 'sqrt':
             return '\sqrt{%s}' % args
         else:
-            return r'\operatorname{%s}\left(%s\\right)' % (func, args)
+            return r'\operatorname{%s}\left(%s\right)' % (func, args)
 
     def prec_Call(self, n):
         return 1000
@@ -27,7 +27,7 @@ class LatexVisitor(ast.NodeVisitor):
 
     def visit_UnaryOp(self, n):
         if self.prec(n.op) > self.prec(n.operand):
-            return r'%s \left(%s\\right)' % (self.visit(n.op), self.visit(n.operand))
+            return r'%s \left(%s\right)' % (self.visit(n.op), self.visit(n.operand))
         else:
             return r'%s %s' % (self.visit(n.op), self.visit(n.operand))
 
@@ -36,17 +36,17 @@ class LatexVisitor(ast.NodeVisitor):
 
     def visit_BinOp(self, n):
         if self.prec(n.op) > self.prec(n.left):
-            left = r'\left(%s\\right)' % self.visit(n.left)
+            left = r'\left(%s\right)' % self.visit(n.left)
         else:
             left = self.visit(n.left)
         if self.prec(n.op) > self.prec(n.right):
-            right = r'\left(%s\\right)' % self.visit(n.right)
+            right = r'\left(%s\right)' % self.visit(n.right)
         else:
             right = self.visit(n.right)
         if isinstance(n.op, ast.Div):
             return r'\frac{%s}{%s}' % (self.visit(n.left), self.visit(n.right))
         elif isinstance(n.op, ast.FloorDiv):
-            return r'\left\lfloor\frac{%s}{%s}\\right\rfloor' % (self.visit(n.left), self.visit(n.right))
+            return r'\left\lfloor\frac{%s}{%s}\right\rfloor' % (self.visit(n.left), self.visit(n.right))
         elif isinstance(n.op, ast.Pow):
             return r'%s^{%s}' % (left, self.visit(n.right))
         else:
@@ -142,5 +142,5 @@ class LatexVisitor(ast.NodeVisitor):
         return 0
 
 def latexify(expression):
-    tree = ast.parse(expression)
+    tree = ast.parse(expression.replace(" ",""))
     return LatexVisitor().visit(tree.body[0].value)

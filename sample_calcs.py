@@ -1,39 +1,63 @@
-import insert_code
+import py_reflection
 import importlib
 import sample_module
 import my_module
+import pint
+import docx
+import create_with_meta
 
-importlib.reload(insert_code)
+u = pint.UnitRegistry()
+
+importlib.reload(py_reflection)
 
 get_meta = True
 
-def some_other_func(a):
-    x = a + 3
-    return x
 
-def pls_dont_insert(g):
-    f = g+4
-    return f
 
-def do_stuff():
-    print('boop')
-    result = some_other_func(7)
-    another_result = pls_dont_insert(8)
-    bop = sample_module.inner(3)
-    return another_result
 
 def use_output(result):
 
-    # all top-level functions to use output needs to start with this
-    if result is None: return
+    if result is None:
+        return
+    
+    doc = docx.Document()
 
     for item in result:
-        print(item)
+
+        is_loop = list(item.keys()) == ["iterator","values","items"]
+
+
+
+        if is_loop:
+
+            iterator = item["iterator"]
+            iteration_values = item["values"]
+
+            for idx, iteration in enumerate(item["items"]):\
+            
+                iteration_value = iteration_values[idx]
+
+                iteration_header = f"When {iterator}={iteration_value}:"
+
+                create_with_meta.add_line_to_word(doc, iteration_header, False)
+
+                for line_meta in iteration:
+                    latex_line = create_with_meta.construct_line(line_meta)
+
+                    create_with_meta.add_line_to_word(doc, latex_line, True)
+        else:
+            latex_line = create_with_meta.construct_line(item)
+            create_with_meta.add_line_to_word(doc, latex_line, True)
+
+
+    doc.save("test.docx")
+
+
 
 if get_meta:
-    result = insert_code.insert_code([my_module.A_func, do_stuff], do_stuff)
+    result = py_reflection.insert_meta([my_module.A_func], my_module.A_func)
     use_output(result)
 else:
-    some_result = do_stuff()
+    some_result = my_module.A_func()
 # this will then 
 pass
