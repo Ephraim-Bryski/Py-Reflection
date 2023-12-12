@@ -1,0 +1,70 @@
+[
+    {
+        "source_code": "g = 2 * u.feet",
+        "values": {
+            "g": "2 foot"
+        }
+    },
+    {
+        "iterator": "i",
+        "values": [
+            0,
+            1,
+            2,
+            3,
+            4
+        ],
+        "items": [
+            [
+                {
+                    "source_code": "b = g * i",
+                    "values": {
+                        "g": "2 foot",
+                        "i": "0",
+                        "b": "0 foot"
+                    }
+                }
+            ],
+            [
+                {
+                    "source_code": "b = g * i",
+                    "values": {
+                        "g": "2 foot",
+                        "i": "1",
+                        "b": "2 foot"
+                    }
+                }
+            ],
+            [
+                {
+                    "source_code": "b = g * i",
+                    "values": {
+                        "g": "2 foot",
+                        "i": "2",
+                        "b": "4 foot"
+                    }
+                }
+            ],
+            [
+                {
+                    "source_code": "b = g * i",
+                    "values": {
+                        "g": "2 foot",
+                        "i": "3",
+                        "b": "6 foot"
+                    }
+                }
+            ],
+            [
+                {
+                    "source_code": "b = g * i",
+                    "values": {
+                        "g": "2 foot",
+                        "i": "4",
+                        "b": "8 foot"
+                    }
+                }
+            ]
+        ]
+    }
+]
